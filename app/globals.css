@@ -36,6 +36,128 @@ body {
   }
 }
 
+@keyframes card-flip-in {
+  0% {
+    opacity: 0;
+    transform: rotateY(90deg) scale(0.7) rotateZ(-5deg);
+    filter: blur(4px);
+  }
+  50% {
+    opacity: 0.4;
+  }
+  100% {
+    opacity: 1;
+    transform: rotateY(0deg) scale(1) rotateZ(0deg);
+    filter: blur(0px);
+  }
+}
+
+@keyframes card-flip-out {
+  0% {
+    opacity: 1;
+    transform: rotateY(0deg) scale(1) rotateZ(0deg);
+    filter: blur(0px);
+  }
+  50% {
+    opacity: 0.4;
+  }
+  100% {
+    opacity: 0;
+    transform: rotateY(-90deg) scale(0.7) rotateZ(5deg);
+    filter: blur(4px);
+  }
+}
+
+@keyframes ripple {
+  0% {
+    transform: scale(0);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(4);
+    opacity: 0;
+  }
+}
+
+@keyframes pulse-ring {
+  0% {
+    box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.7);
+  }
+  70% {
+    box-shadow: 0 0 0 10px rgba(59, 130, 246, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(59, 130, 246, 0);
+  }
+}
+
+@keyframes float-up {
+  0% {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: -1000px 0;
+  }
+  100% {
+    background-position: 1000px 0;
+  }
+}
+
 .month-transition {
-  animation: month-fade-slide 200ms ease-out;
+  animation: card-flip-in 700ms cubic-bezier(0.34, 1.56, 0.64, 1);
+  perspective: 1500px;
+  transform-style: preserve-3d;
+  will-change: transform, opacity;
+}
+
+.ripple {
+  position: absolute;
+  border-radius: 50%;
+  background: rgba(59, 130, 246, 0.6);
+  transform: scale(0);
+  animation: ripple 600ms ease-out;
+  pointer-events: none;
+}
+
+.pulse-ring {
+  animation: pulse-ring 2s infinite;
+}
+
+.float-in {
+  animation: float-up 300ms ease-out;
+}
+
+.shimmer-bg {
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.3),
+    transparent
+  );
+  background-size: 1000px 100%;
+  animation: shimmer 2s infinite;
+}
+
+@keyframes page-shadow {
+  0% {
+    box-shadow: 0 0 30px rgba(0, 0, 0, 0.1), inset 0 0 20px rgba(0, 0, 0, 0.05);
+  }
+  50% {
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3), inset 0 0 30px rgba(0, 0, 0, 0.15);
+  }
+  100% {
+    box-shadow: 0 0 30px rgba(0, 0, 0, 0.1), inset 0 0 20px rgba(0, 0, 0, 0.05);
+  }
+}
+
+.calendar-card-flip {
+  animation: page-shadow 700ms cubic-bezier(0.34, 1.56, 0.64, 1);
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 const NOTES_STORAGE_KEY = "calendar-notes";
 type NotesByDate = Record<string, string>;
@@ -227,6 +227,21 @@ function getMonthKey(date: Date): string {
   return `${year}-${month}${MONTH_NOTE_SUFFIX}`;
 }
 
+function getWeekNumber(date: Date, dayOfMonth: number): number {
+  const firstDay = new Date(date.getFullYear(), date.getMonth(), 1).getDay();
+  return Math.floor((firstDay + dayOfMonth - 1) / 7);
+}
+
+function countNotesInMonth(notesByDate: NotesByDate, year: number, month: number): number {
+  let count = 0;
+  for (const key in notesByDate) {
+    if (notesByDate[key]?.trim() && key.startsWith(`${year}-${String(month + 1).padStart(2, "0")}-`)) {
+      count++;
+    }
+  }
+  return count;
+}
+
 export default function Home() {
   const weekDays = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
   const [currentMonth, setCurrentMonth] = useState<Date>(new Date());
@@ -234,6 +249,11 @@ export default function Home() {
   const [endDate, setEndDate] = useState<number | null>(null);
   const [selectedNoteDay, setSelectedNoteDay] = useState<number | null>(null);
   const [notesByDate, setNotesByDate] = useState<NotesByDate>({});
+  const [hoveredWeek, setHoveredWeek] = useState<number | null>(null);
+  const [showKeyboardHelp, setShowKeyboardHelp] = useState<boolean>(false);
+  const [ripplePos, setRipplePos] = useState<{ x: number; y: number } | null>(null);
+  const [animationKey, setAnimationKey] = useState<number>(0);
+  const prevMonthRef = useRef<string>("");
   const daysInMonth = getDaysInMonth(currentMonth);
   const firstDay = getFirstDayOfMonth(currentMonth);
   const firstDayLabel = weekDays[firstDay];
@@ -291,6 +311,45 @@ export default function Home() {
     clearDateSelection();
   };
 
+  const jumpToToday = () => {
+    const today = new Date();
+    setCurrentMonth(new Date(today.getFullYear(), today.getMonth(), 1));
+    clearDateSelection();
+    setHoveredWeek(null);
+  };
+
+  const handlePresetRange = (preset: "week" | "month" | "year") => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const day = today.getDate();
+    const dayOfWeek = today.getDay();
+    let start: number, end: number;
+
+    if (preset === "week") {
+      start = day - dayOfWeek;
+      end = start + 6;
+    } else if (preset === "month") {
+      start = 1;
+      end = getDaysInMonth(currentMonth);
+    } else {
+      start = 1;
+      end = getDaysInMonth(currentMonth);
+    }
+
+    setStartDate(Math.max(1, start));
+    setEndDate(Math.min(getDaysInMonth(currentMonth), end));
+    setSelectedNoteDay(null);
+  };
+
+  const handleDateCellClick = (day: number, event: React.MouseEvent<HTMLDivElement>) => {
+    const rect = event.currentTarget.getBoundingClientRect();
+    const x = event.clientX - rect.left;
+    const y = event.clientY - rect.top;
+    setRipplePos({ x, y });
+    setTimeout(() => setRipplePos(null), 600);
+    handleDateClick(day);
+  };
+
   useEffect(() => {
     const savedNotes = localStorage.getItem(NOTES_STORAGE_KEY);
 
@@ -312,12 +371,36 @@ export default function Home() {
     const handleEscape = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         clearDateSelection();
+        setShowKeyboardHelp(false);
+      } else if (event.key === "?") {
+        event.preventDefault();
+        setShowKeyboardHelp((prev) => !prev);
+      } else if (event.key === "t" && !showKeyboardHelp) {
+        jumpToToday();
+      } else if (event.key === "w" && !showKeyboardHelp) {
+        handlePresetRange("week");
+      } else if (event.key === "m" && !showKeyboardHelp) {
+        handlePresetRange("month");
       }
     };
 
     window.addEventListener("keydown", handleEscape);
     return () => window.removeEventListener("keydown", handleEscape);
-  }, []);
+  }, [showKeyboardHelp]);
+
+  useEffect(() => {
+    const monthKey = currentMonth.toLocaleString("en-US", {
+      month: "long",
+      year: "numeric",
+    });
+
+    if (prevMonthRef.current && prevMonthRef.current !== monthKey) {
+      // Month changed - trigger animation
+      setAnimationKey((prev) => prev + 1);
+    }
+
+    prevMonthRef.current = monthKey;
+  }, [currentMonth]);
 
   return (
     <main
@@ -326,7 +409,10 @@ export default function Home() {
     >
       <div
         onClick={(event) => event.stopPropagation()}
-        className={`mx-auto flex w-full max-w-6xl flex-col overflow-hidden rounded-3xl border border-stone-300 shadow-[0_20px_52px_rgba(16,24,40,0.14)] md:min-h-[86vh] md:flex-row ${monthTheme.cardBg}`}
+        key={animationKey}
+        className={`mx-auto flex w-full max-w-6xl flex-col overflow-hidden rounded-3xl border border-stone-300 shadow-[0_20px_52px_rgba(16,24,40,0.14)] md:min-h-[86vh] md:flex-row ${
+          animationKey > 0 ? "calendar-card-flip" : ""
+        } ${monthTheme.cardBg}`}
       >
         <section className={`h-auto w-full p-4 sm:p-5 md:w-1/2 md:p-6 ${monthTheme.sectionBg}`}>
           <header className={`flex items-center justify-between rounded-xl border border-slate-300 px-4 py-3 ${monthTheme.headerBg}`}>
@@ -338,12 +424,19 @@ export default function Home() {
             >
               &larr;
             </button>
-            <h2
-              className="text-xl font-bold text-slate-800 sm:text-2xl"
-              title={`${daysInMonth} days • starts on ${firstDayLabel}`}
-            >
-              {monthLabel}
-            </h2>
+            <div className="flex flex-col items-center gap-1">
+              <h2
+                className="text-xl font-bold text-slate-800 sm:text-2xl"
+                title={`${daysInMonth} days • starts on ${firstDayLabel}`}
+              >
+                {monthLabel}
+              </h2>
+              {countNotesInMonth(notesByDate, currentMonth.getFullYear(), currentMonth.getMonth()) > 0 && (
+                <div className="text-xs font-semibold text-slate-500 flex items-center gap-1">
+                  📝 {countNotesInMonth(notesByDate, currentMonth.getFullYear(), currentMonth.getMonth())} date(s) with notes
+                </div>
+              )}
+            </div>
             <button
               type="button"
               aria-label="Next month"
@@ -353,6 +446,63 @@ export default function Home() {
               &rarr;
             </button>
           </header>
+          <div className="mt-3 flex flex-wrap gap-2 md:flex-nowrap">
+            <button
+              onClick={jumpToToday}
+              type="button"
+              title="Press 't'"
+              className="rounded-lg bg-blue-500 hover:bg-blue-600 text-white text-xs font-semibold px-3 py-1.5 transition-all duration-200 shadow-sm hover:shadow-md"
+            >
+              📅 Today
+            </button>
+            <button
+              onClick={() => handlePresetRange("week")}
+              type="button"
+              title="Press 'w'"
+              className="rounded-lg bg-sky-400 hover:bg-sky-500 text-white text-xs font-semibold px-3 py-1.5 transition-all duration-200 shadow-sm hover:shadow-md"
+            >
+              📆 This Week
+            </button>
+            <button
+              onClick={() => handlePresetRange("month")}
+              type="button"
+              title="Press 'm'"
+              className="rounded-lg bg-slate-400 hover:bg-slate-500 text-white text-xs font-semibold px-3 py-1.5 transition-all duration-200 shadow-sm hover:shadow-md"
+            >
+              📅 This Month
+            </button>
+            <button
+              onClick={() => setShowKeyboardHelp(!showKeyboardHelp)}
+              type="button"
+              title="Press '?'"
+              className="ml-auto rounded-lg border border-slate-300 hover:bg-slate-100 text-slate-700 text-xs font-semibold px-3 py-1.5 transition-all duration-200"
+            >
+              ⌨️ Help
+            </button>
+          </div>
+          {showKeyboardHelp && (
+            <div className="mt-3 float-in rounded-lg bg-blue-50 border border-blue-200 p-3 text-xs text-slate-600 space-y-1">
+              <p className="font-bold text-blue-700 mb-2">⌨️ Keyboard Shortcuts</p>
+              <div>
+                <span className="font-semibold">?</span> — Toggle this help
+              </div>
+              <div>
+                <span className="font-semibold">Esc</span> — Clear selection
+              </div>
+              <div>
+                <span className="font-semibold">t</span> — Jump to today
+              </div>
+              <div>
+                <span className="font-semibold">w</span> — Select this week
+              </div>
+              <div>
+                <span className="font-semibold">m</span> — Select this month
+              </div>
+              <div>
+                <span className="font-semibold">Click & drag</span> — Range selection
+              </div>
+            </div>
+          )}
           <div className="mt-3 flex items-center justify-between gap-2 rounded-lg border border-slate-200 bg-white/70 px-3 py-2 text-xs text-slate-600">
             <p>
               {startDate === null
@@ -370,7 +520,7 @@ export default function Home() {
             </button>
           </div>
           <div className="mt-5">
-            <div key={monthLabel} className="month-transition">
+            <div className="month-transition">
               <div className="grid grid-cols-7 gap-2 text-center text-xs font-semibold text-slate-600 sm:gap-3">
                 {weekDays.map((day) => (
                   <div key={day}>{day}</div>
@@ -387,6 +537,8 @@ export default function Home() {
                   const isPastDate = cellDate !== null && cellDate < todayAtMidnight;
                   const dayOfWeek = day !== null ? (firstDay + day - 1) % 7 : null;
                   const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
+                  const weekNum = day !== null ? getWeekNumber(currentMonth, day) : null;
+                  const isInHoveredWeek = weekNum === hoveredWeek && hoveredWeek !== null;
                   const isStartDate = day !== null && day === startDate;
                   const isEndDate = day !== null && day === endDate;
                   const isMiddleDate =
@@ -401,20 +553,27 @@ export default function Home() {
                       : null;
                   const holidayLabel = monthDayKey ? HOLIDAY_MARKERS[monthDayKey] : undefined;
                   const isHoliday = Boolean(holidayLabel);
+                  const hasNote = day !== null && notesByDate[getDateKey(currentMonth, day)]?.trim();
 
                   return (
                     <div
                       key={index}
-                      onClick={() => {
-                        if (day !== null && !isPastDate) handleDateClick(day);
+                      onClick={(event) => {
+                        if (day !== null && !isPastDate) handleDateCellClick(day, event);
                       }}
-                      title={holidayLabel ?? undefined}
+                      onMouseEnter={() => {
+                        if (day !== null && !isPastDate && weekNum !== null) {
+                          setHoveredWeek(weekNum);
+                        }
+                      }}
+                      onMouseLeave={() => setHoveredWeek(null)}
+                      title={holidayLabel ?? (hasNote ? "📝 Has notes" : "")}
                       className={`relative aspect-square border border-slate-300 flex items-center justify-center text-sm text-slate-700 transition-all duration-200 ease-out sm:text-base md:text-sm ${
                         day === null
                           ? ""
                           : isPastDate
                             ? "opacity-45 cursor-not-allowed text-slate-400"
-                            : `cursor-pointer hover:scale-[1.03] ${monthTheme.cellHover}`
+                            : `cursor-pointer ${isInHoveredWeek ? "ring-2 ring-offset-1 ring-blue-300" : ""} hover:scale-[1.03] ${monthTheme.cellHover}`
                       } ${
                         isStartDate && isEndDate
                           ? `${monthTheme.selected} font-bold rounded-full shadow-sm`
@@ -429,9 +588,25 @@ export default function Home() {
                         isWeekend && !isStartDate && !isEndDate && !isMiddleDate ? "text-slate-500" : ""
                       }`}
                     >
-                      {day !== null ? <span className="leading-none">{day}</span> : ""}
+                      {ripplePos && (isStartDate || isEndDate || isMiddleDate) && (
+                        <div
+                          className="ripple"
+                          style={{
+                            left: `${ripplePos.x}px`,
+                            top: `${ripplePos.y}px`,
+                            width: "20px",
+                            height: "20px",
+                            marginLeft: "-10px",
+                            marginTop: "-10px",
+                          }}
+                        />
+                      )}
+                      {day !== null ? <span className="leading-none relative z-10">{day}</span> : ""}
                       {isHoliday ? (
-                        <span className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-rose-500" />
+                        <span className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-rose-500 shadow-sm" />
+                      ) : null}
+                      {hasNote && !isHoliday ? (
+                        <span className="absolute right-1 top-1 h-1 w-1 rounded-full bg-amber-400" />
                       ) : null}
                     </div>
                   );
