@@ -498,9 +498,9 @@ export default function Home() {
               <div>
                 <span className="font-semibold">m</span> — Select this month
               </div>
-              <div>
+              {/* <div>
                 <span className="font-semibold">Click & drag</span> — Range selection
-              </div>
+              </div> */}
             </div>
           )}
           <div className="mt-3 flex items-center justify-between gap-2 rounded-lg border border-slate-200 bg-white/70 px-3 py-2 text-xs text-slate-600">
